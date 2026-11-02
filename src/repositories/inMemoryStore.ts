@@ -1,4 +1,4 @@
-import { Category, Order, Product, RefreshTokenRecord, User } from '../types';
+import { Category, Order, OutboxEvent, Product, RefreshTokenRecord, User } from '../types';
 
 export const inMemoryUsers: User[] = [];
 
@@ -41,3 +41,7 @@ export const inMemoryProducts: Product[] = [
 export const inMemoryOrders: Order[] = [];
 
 export const inMemoryRefreshTokens: RefreshTokenRecord[] = [];
+
+export const inMemoryOutboxEvents: OutboxEvent[] = [];
+
+export const inMemoryProcessedEvents = new Set<string>();

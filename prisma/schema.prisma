@@ -9,6 +9,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  STAFF
   CUSTOMER
 }
 
@@ -49,10 +50,13 @@ model Product {
   category    Category    @relation(fields: [categoryId], references: [id])
   categoryId  String
   inventory   Int         @default(0)
+  embedding   Unsupported("vector(1536)")?
   createdAt   DateTime    @default(now())
   cartItems   CartItem[]
   orderItems  OrderItem[]
   inventoryLog Inventory?
+
+  @@index([categoryId])
 }
 
 model Order {
@@ -97,10 +101,30 @@ model RefreshToken {
   id        String   @id @default(uuid())
   user      User     @relation(fields: [userId], references: [id])
   userId    String
-  token     String   @unique
+  tokenHash String   @unique
   expiresAt DateTime
   revoked   Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId, revoked])
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  eventType   String
+  aggregateId String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+
+  @@index([publishedAt, createdAt])
+  @@unique([eventType, aggregateId])
+}
+
+model ProcessedEvent {
+  eventId     String   @id
+  processedAt DateTime @default(now())
 }
 
 model Payment {

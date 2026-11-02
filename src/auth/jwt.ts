@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 
 import { config } from '../config';
@@ -10,7 +11,7 @@ export function generateAccessToken(user: { id: string; email: string; role: Rol
     role: user.role,
   };
 
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: '15m' });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: '15m', jwtid: randomUUID() });
 }
 
 export function generateRefreshToken(user: { id: string; email: string; role: Role }): string {
@@ -20,7 +21,7 @@ export function generateRefreshToken(user: { id: string; email: string; role: Ro
     role: user.role,
   };
 
-  return jwt.sign(payload, config.jwtRefreshSecret, { expiresIn: '7d' });
+  return jwt.sign(payload, config.jwtRefreshSecret, { expiresIn: '7d', jwtid: randomUUID() });
 }
 
 export function verifyAccessToken(token: string): AuthUserPayload {

@@ -9,6 +9,34 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ecommerce?schema=public
+      REDIS_URL: redis://localhost:6379
+      STORAGE_MODE: memory
+      JWT_SECRET: ci-only-secret-access-key-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-only-secret-refresh-key-at-least-32-characters
+      INTERNAL_API_KEY: ci-only-internal-api-key-at-least-32-characters
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecommerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecommerce"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -26,11 +54,23 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
       - name: Run tests
         run: npm test -- --runInBand
 
+      - name: Test PostgreSQL persistence
+        run: npm run test:integration
+        env:
+          STORAGE_MODE: prisma
+          RUN_PRISMA_INTEGRATION: 'true'
+
       - name: Build TypeScript
         run: npm run build
-
-      - name: Validate project integrity
-        run: npx prisma validate

@@ -3,8 +3,10 @@ import { randomUUID } from 'crypto';
 import { hashPassword } from '../auth/password';
 import { config } from '../config';
 import { orderRepository } from '../repositories/order.repository';
+import { categoryRepository } from '../repositories/category.repository';
 import { productRepository } from '../repositories/product.repository';
 import { userRepository } from '../repositories/user.repository';
+import { inMemoryCategories, inMemoryProducts } from '../repositories/inMemoryStore';
 import { Order, User } from '../types';
 
 const demoCustomers = [
@@ -16,6 +18,20 @@ const demoCustomers = [
 export async function seedDemoData(): Promise<void> {
   if (config.nodeEnv === 'production') {
     return;
+  }
+
+  const existingCategories = await categoryRepository.findAll();
+  for (const category of inMemoryCategories) {
+    if (!existingCategories.some((existing) => existing.id === category.id)) {
+      await categoryRepository.create(category);
+    }
+  }
+
+  const existingProducts = await productRepository.findAll();
+  for (const product of inMemoryProducts) {
+    if (!existingProducts.some((existing) => existing.id === product.id)) {
+      await productRepository.create(product);
+    }
   }
 
   const now = new Date().toISOString();

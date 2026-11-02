@@ -19,6 +19,7 @@ import { logger } from './utils/logger';
 import { requireAPIKey } from './middlewares/auth';
 import { ensureBootstrapAdmin } from './services/auth.service';
 import { seedDemoData } from './services/demo-data.service';
+import { indexMissingProductEmbeddings } from './services/search.service';
 
 export function createApp(): Application {
   const app = express();
@@ -61,6 +62,9 @@ export async function bootApplication(): Promise<{ app: Application; httpServer:
   const app = createApp();
   await ensureBootstrapAdmin();
   await seedDemoData();
+  void indexMissingProductEmbeddings().catch((error) => {
+    logger.error(`Product embedding backfill failed: ${String(error)}`);
+  });
   const worker = new OrderProcessingWorker();
   void connectRedis().then(() => worker.start());
 

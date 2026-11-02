@@ -3,8 +3,8 @@ import { randomUUID } from 'crypto';
 import { productRepository } from '../repositories/product.repository';
 import { orderRepository } from '../repositories/order.repository';
 import { userRepository } from '../repositories/user.repository';
-import { Order, OrderInput, OrderStatus } from '../types';
-import { publishOrderCreated } from '../events/redis-streams';
+import { Order, OrderInput, OrderStatus, OutboxEvent } from '../types';
+import { dispatchPendingOrderEvents } from '../events/redis-streams';
 
 export async function createOrder(input: OrderInput): Promise<{ order: Order; accepted: boolean }> {
   if (!input.userId) {
@@ -31,8 +31,23 @@ export async function createOrder(input: OrderInput): Promise<{ order: Order; ac
 
   order.items = items.map((item) => ({ ...item, orderId: order.id }));
 
-  await orderRepository.create(order);
-  await publishOrderCreated(order);
+  const event: OutboxEvent = {
+    id: randomUUID(),
+    eventType: 'OrderCreated',
+    aggregateId: order.id,
+    payload: {
+      eventType: 'OrderCreated',
+      orderId: order.id,
+      userId: order.userId,
+      total: order.total,
+      status: order.status,
+      createdAt: order.createdAt,
+    },
+    createdAt: new Date().toISOString(),
+    attempts: 0,
+  };
+  await orderRepository.create(order, event);
+  await dispatchPendingOrderEvents();
 
   return { order, accepted: true };
 }

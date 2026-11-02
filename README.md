@@ -15,12 +15,19 @@ This repository contains a unified Node.js + TypeScript e-commerce backend that 
 
 1. Install dependencies:
    npm install
-2. Copy environment file if needed:
-   Copy `.env.example` to `.env`
-3. Start PostgreSQL and Redis via Docker Compose:
-   docker compose up -d
-4. Start the API:
-   npm run dev
+2. Copy `.env.example` to `.env` and replace its local-only values if needed.
+3. Start PostgreSQL and Redis:
+   `docker compose up -d postgres redis`
+4. Apply migrations and start the API:
+   `npm run prisma:migrate:deploy`
+   `npm run dev`
+
+For the complete containerized stack, run `docker compose up --build`. Compose
+requires the database credentials and all three application secrets to be set in
+the environment or `.env`; use unique, strong secrets for production. The sample
+`.env.example` secrets are local-development placeholders and are rejected when
+`NODE_ENV=production`. Use a URL-safe PostgreSQL password, or percent-encode it
+when placing it in `DATABASE_URL`.
 
 The English, left-to-right store dashboard is served by the API at `http://localhost:4000/`.
 It includes account registration and login, product browsing, order checkout, and
@@ -43,9 +50,10 @@ pages, set `ADMIN_EMAIL` and a strong `ADMIN_PASSWORD` (at least 8 characters) i
 `.env` before starting the server. `ADMIN_NAME` is optional. The configured admin
 account is created on startup and is not reset when it already exists.
 
-The current repositories store users, products, categories, and orders in memory;
-their data is reset when the server restarts. Configure a persistent repository
-before using this backend for production data.
+Production uses Prisma/PostgreSQL for users, products, categories, orders, and
+refresh-token records. The in-memory repositories are retained for automated
+tests and local development when `STORAGE_MODE=memory`. Production startup
+requires PostgreSQL and `STORAGE_MODE=prisma`.
 
 ## Core endpoints
 
@@ -58,6 +66,7 @@ before using this backend for production data.
 - POST /api/auth/refresh
 - POST /api/auth/logout
 - GET /api/products
+- GET /api/products?q=natural-language-query (embedding-based semantic search)
 - POST /api/products
 - POST /api/orders
 - GET /api/orders (admin or staff)
@@ -72,6 +81,11 @@ before using this backend for production data.
 - API requests are rate-limited; dashboard and static asset requests are excluded.
   The default is 1,000 API requests per 15 minutes in development and 100 in
   production. `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_MINUTES` override these defaults.
-- Redis failures degrade gracefully and the app continues safely with in-memory fallback behavior.
+- Redis failures degrade gracefully; rate limiting falls back to local memory, while pending order events remain durable in PostgreSQL.
 - Rate limiting remains enforced even when external cache services are unavailable.
-- Prisma queries are configured for PostgreSQL and can be extended to fully transactional inventory deductions and order creation in a production deployment.
+- Order rows and `OrderCreated` outbox events are committed together; the Redis Streams relay retries unpublished events, and the worker uses consumer groups, acknowledgements, pending-message recovery, idempotency records, and a dead-letter stream.
+- Refresh JWTs are stored only as SHA-256 digests and rotated atomically.
+- The async data engine uses `Promise.allSettled()` with bounded concurrency, per-operation timeouts, and structured failures.
+- Semantic search uses PostgreSQL pgvector and an OpenAI-compatible embedding endpoint. Configure `EMBEDDING_API_URL`, `EMBEDDING_API_KEY`, and `EMBEDDING_MODEL`; without a configured key or if the provider/vector query fails, search falls back to the standard catalog rather than simulating semantic relevance with text matching.
+- Apply schema changes with `npm run prisma:migrate` during development. Container startup applies committed migrations with `prisma migrate deploy`.
+- Use `npm run typecheck`, `npm test`, and `npm run build` for local validation.

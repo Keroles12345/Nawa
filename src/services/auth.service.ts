@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../auth/jwt';
 import { hashPassword, verifyPassword } from '../auth/password';
@@ -8,6 +8,20 @@ import { userRepository } from '../repositories/user.repository';
 import { CreateUserInput, LoginInput, RefreshTokenRecord, Role, User } from '../types';
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function hashRefreshToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function createRefreshTokenRecord(userId: string, token: string): RefreshTokenRecord {
+  return {
+    id: randomUUID(),
+    userId,
+    tokenHash: hashRefreshToken(token),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    revoked: false,
+  };
+}
 
 export function sanitizeUser(user: User): Omit<User, 'passwordHash'> {
   const { passwordHash, ...safeUser } = user;
@@ -82,15 +96,7 @@ export async function registerUser(input: CreateUserInput): Promise<{ user: Omit
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
-  const refreshRecord: RefreshTokenRecord = {
-    id: randomUUID(),
-    userId: user.id,
-    token: refreshToken,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    revoked: false,
-  };
-
-  await refreshTokenRepository.create(refreshRecord);
+  await refreshTokenRepository.create(createRefreshTokenRecord(user.id, refreshToken));
 
   return {
     user: sanitizeUser(user),
@@ -128,15 +134,7 @@ export async function loginUser(input: LoginInput): Promise<{ user: Omit<User, '
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
-  const refreshRecord: RefreshTokenRecord = {
-    id: randomUUID(),
-    userId: user.id,
-    token: refreshToken,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    revoked: false,
-  };
-
-  await refreshTokenRepository.create(refreshRecord);
+  await refreshTokenRepository.create(createRefreshTokenRecord(user.id, refreshToken));
 
   return {
     user: sanitizeUser(user),
@@ -147,9 +145,11 @@ export async function loginUser(input: LoginInput): Promise<{ user: Omit<User, '
 
 export async function refreshTokens(refreshTokenValue: string): Promise<{ accessToken: string; refreshToken: string }> {
   const payload = verifyRefreshToken(refreshTokenValue);
-  const storedRefreshToken = await refreshTokenRepository.findByToken(refreshTokenValue);
+  const tokenHash = hashRefreshToken(refreshTokenValue);
+  const storedRefreshToken = await refreshTokenRepository.findByTokenHash(tokenHash);
 
-  if (!storedRefreshToken || storedRefreshToken.revoked) {
+  if (!storedRefreshToken || storedRefreshToken.revoked || new Date(storedRefreshToken.expiresAt).getTime() <= Date.now() ||
+    storedRefreshToken.userId !== payload.sub) {
     throw new Error('Refresh token invalid');
   }
 
@@ -161,18 +161,11 @@ export async function refreshTokens(refreshTokenValue: string): Promise<{ access
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
-  await refreshTokenRepository.revoke(refreshTokenValue);
-  await refreshTokenRepository.create({
-    id: randomUUID(),
-    userId: user.id,
-    token: refreshToken,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    revoked: false,
-  });
+  await refreshTokenRepository.rotate(tokenHash, createRefreshTokenRecord(user.id, refreshToken));
 
   return { accessToken, refreshToken };
 }
 
 export async function logoutUser(refreshTokenValue: string): Promise<void> {
-  await refreshTokenRepository.revoke(refreshTokenValue);
+  await refreshTokenRepository.revoke(hashRefreshToken(refreshTokenValue));
 }

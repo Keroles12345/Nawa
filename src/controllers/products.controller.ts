@@ -1,9 +1,19 @@
 import { Request, Response } from 'express';
 
 import { createProduct, deleteProduct, getProductById, listProducts, updateProduct } from '../services/product.service';
+import { searchProducts } from '../services/search.service';
 
 export async function getProducts(req: Request, res: Response): Promise<void> {
   try {
+    if (typeof req.query.q === 'string') {
+      if (req.query.q.trim().length < 2 || req.query.q.trim().length > 500) {
+        res.status(400).json({ success: false, message: 'Search query must be between 2 and 500 characters' });
+        return;
+      }
+      const products = await searchProducts(req.query.q);
+      res.status(200).json({ success: true, data: products });
+      return;
+    }
     const products = await listProducts();
     res.status(200).json({ success: true, data: products });
   } catch (error) {

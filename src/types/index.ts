@@ -49,9 +49,19 @@ export interface Order {
 export interface RefreshTokenRecord {
   id: string;
   userId: string;
-  token: string;
+  tokenHash: string;
   expiresAt: string;
   revoked: boolean;
+}
+
+export interface OutboxEvent {
+  id: string;
+  eventType: string;
+  aggregateId: string;
+  payload: Record<string, string | number | boolean | null>;
+  createdAt: string;
+  publishedAt?: string;
+  attempts: number;
 }
 
 export interface ApiResponse<T> {

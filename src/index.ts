@@ -6,6 +6,7 @@ import { OrderProcessingWorker } from './events/redis-streams';
 import { createHttpInspectorServer } from './http-inspector/server';
 import { ensureBootstrapAdmin } from './services/auth.service';
 import { seedDemoData } from './services/demo-data.service';
+import { indexMissingProductEmbeddings } from './services/search.service';
 
 async function startServer(): Promise<void> {
   await ensureBootstrapAdmin();
@@ -14,6 +15,10 @@ async function startServer(): Promise<void> {
   const app = createApp();
   const server = app.listen(config.port, () => {
     logger.info(`API server listening on port ${config.port}`);
+  });
+
+  void indexMissingProductEmbeddings().catch((error) => {
+    logger.error(`Product embedding backfill failed: ${String(error)}`);
   });
 
   createHttpInspectorServer(config.port + 1);
