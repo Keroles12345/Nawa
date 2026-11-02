@@ -19,4 +19,21 @@ describe('HTTP inspector server', () => {
       server.close();
     }
   });
+
+  it('should reject malformed JSON payloads with a 400 response', async () => {
+    const server = createHttpInspectorServer(0);
+
+    try {
+      const malformedBodyResponse = await request(server)
+        .post('/api/health')
+        .set('Content-Type', 'application/json')
+        .send('{ invalid json');
+
+      expect(malformedBodyResponse.status).toBe(400);
+      expect(malformedBodyResponse.body.success).toBe(false);
+      expect(malformedBodyResponse.body.message).toBe('Malformed JSON body');
+    } finally {
+      server.close();
+    }
+  });
 });
